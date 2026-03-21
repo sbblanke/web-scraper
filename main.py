@@ -3,6 +3,7 @@
 import asyncio
 import sys
 from crawl import crawl_site_async
+from json_report import write_json_report
 from typing import cast
 
 
@@ -26,10 +27,8 @@ async def main_async():
             max_pages = int(sys.argv[3])
 
     page_data = await crawl_site_async(BASE_URL, max_concurrency, max_pages)
-    real_pages = [p for p in page_data.values() if p is not None]
-    print(f"found {len(real_pages)} pages")
-    for page in real_pages:
-        print(f"- {page['url']}: {len(page['outgoing_links'])} outgoing links")
+
+    write_json_report(page_data)
 
 
 if __name__ == "__main__":
