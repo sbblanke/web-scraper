@@ -75,7 +75,6 @@ class AsyncCrawler:
 
         async with self.semaphore:
             page_html = await self.fetch(current_url)
-            print(f"fetched html from {current_url}")
             if not page_html:
                 return self.page_data
             curr_page_data = extract_page_data(page_html, current_url)
