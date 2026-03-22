@@ -2,9 +2,9 @@
 
 import asyncio
 import aiohttp
-import requests
 from urllib.parse import urlparse, urljoin
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
+from typing import TypedDict
 
 
 class AsyncCrawler:
@@ -51,14 +51,17 @@ class AsyncCrawler:
             content_type = resp.headers.get("content-type", "")
             if resp.status >= 400:
                 print(f"got HTTP error: {resp.status} {resp.reason}")
+                return ""
             elif "text/html" not in content_type:
                 print(f"got non-HTML response: {content_type}")
+                return ""
             elif resp.status == 200:
-                return await resp.text()
+                html = await resp.text()
+        return html
 
-    async def crawl_page(self, current_url=None) -> list[str]:
+    async def crawl_page(self, current_url=None) -> dict[str, str]:
         if self.should_stop:
-            return
+            return {}
         # Handle "None" inputs for current_url and page_data (starting use case)
         if current_url is None:
             current_url = self.base_url
@@ -103,6 +106,14 @@ class AsyncCrawler:
         return self.page_data
 
 
+class PageData(TypedDict):
+    url: str
+    heading: str
+    first_paragraph: str
+    outgoing_links: list[str]
+    image_urls: list[str]
+
+
 async def crawl_site_async(base_url, max_concurrency=None, max_pages=None):
     if max_concurrency is not None:
         updated_max_concurrency = max_concurrency
@@ -124,50 +135,64 @@ def normalize_url(input_url: str) -> str:
 
 def get_heading_from_html(html_str: str) -> str:
     soup = BeautifulSoup(html_str, "html.parser")
-    if soup.find("h1"):
-        header = soup.find("h1").get_text().strip()
-    elif soup.find("h2"):
-        header = soup.find("h2").get_text().strip()
-    else:
-        return ""
-    return header
+    if tag := soup.find("h1"):
+        return tag.get_text().strip()
+    if tag := soup.find("h2"):
+        return tag.get_text().strip()
+    return ""
 
 
 def get_first_paragraph_from_html(html_str: str) -> str:
     soup = BeautifulSoup(html_str, "html.parser")
-    if not soup.find("p"):
-        return ""
+
+    fallback_p = soup.find("p")
 
     main_tag = soup.find("main")
-    if main_tag:
-        main_text = main_tag.find("p")
-        if main_text:
-            para = main_text.get_text().strip()
-            return para
-        else:
-            return soup.find("p").get_text().strip()
-    else:
-        return soup.find("p").get_text().strip()
+
+    if isinstance(main_tag, Tag):
+        if main_p := main_tag.find("p"):
+            return main_p.get_text().strip()
+
+    if fallback_p:
+        return fallback_p.get_text().strip()
+
+    return ""
 
 
 def get_urls_from_html(html_str: str, base_url: str) -> list[str]:
     soup = BeautifulSoup(html_str, "html.parser")
-    if not soup.find_all("a"):
-        return []
+    links: list[str] = []
 
-    links = []
     for link in soup.find_all("a"):
-        if not link.get("href"):
+        if not isinstance(link, Tag):
             continue
+
         href_link = link.get("href")
-        abs_link = urljoin(base_url, href_link)
-        links.append(abs_link)
+
+        if isinstance(href_link, str):
+            abs_link = urljoin(base_url, href_link)
+            links.append(abs_link)
 
     return links
 
 
 def get_images_from_html(html_str: str, base_url: str) -> list[str]:
     soup = BeautifulSoup(html_str, "html.parser")
+    links: list[str] = []
+
+    for img in soup.find_all("img"):
+        if not isinstance(img, Tag):
+            continue
+
+        if not (src := img.get("src")):
+            continue
+
+        if isinstance(src, str):
+            abs_link = urljoin(base_url, src)
+            links.append(abs_link)
+
+    return links
+
     if not soup.find_all("img"):
         return []
 
@@ -182,19 +207,13 @@ def get_images_from_html(html_str: str, base_url: str) -> list[str]:
     return links
 
 
-def extract_page_data(html_str: str, page_url: str) -> dict[str:str]:
-    page = {}
-    page["url"] = page_url
-    page["heading"] = get_heading_from_html(html_str)
-    page["first_paragraph"] = get_first_paragraph_from_html(html_str)
-    page["outgoing_links"] = get_urls_from_html(html_str, page_url)
-    page["image_urls"] = get_images_from_html(html_str, page_url)
+def extract_page_data(html_str: str, page_url: str) -> PageData:
+    page: PageData = {
+        "url": page_url,
+        "heading": get_heading_from_html(html_str),
+        "first_paragraph": get_first_paragraph_from_html(html_str),
+        "outgoing_links": get_urls_from_html(html_str, page_url),
+        "image_urls": get_images_from_html(html_str, page_url),
+    }
+
     return page
-
-
-def safe_get_html(url: str):
-    try:
-        return get_html(url)
-    except Exception as e:
-        print(f"{e}")
-        return None
