@@ -9,3 +9,10 @@ dependencies = [
     "beautifulsoup4==4.13.4",
     "requests==2.32.4",
 ]
+
+[dependency-groups]
+dev = [
+    "bandit>=1.9.4",
+    "mypy>=1.19.1",
+    "ruff>=0.15.7",
+]

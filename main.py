@@ -4,10 +4,9 @@ import asyncio
 import sys
 from crawl import crawl_site_async
 from json_report import write_json_report
-from typing import cast
 
 
-async def main_async():
+async def main_async() -> None:
     if len(sys.argv) < 2:
         print("no website provided")
         sys.exit(1)
@@ -29,6 +28,7 @@ async def main_async():
     page_data = await crawl_site_async(BASE_URL, max_concurrency, max_pages)
 
     write_json_report(page_data)
+    print("Crawl complete!")
 
 
 if __name__ == "__main__":
